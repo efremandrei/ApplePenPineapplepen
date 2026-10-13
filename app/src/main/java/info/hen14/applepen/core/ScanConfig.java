@@ -17,10 +17,18 @@ public final class ScanConfig implements Serializable {
     public final long budgetMs;
     public final ArrayList<Integer> extraHttpPorts, extraHttpsPorts;
     public final boolean lookupCves;
+    public final boolean protocolChecks, enumerateTls;
+    public final ArrayList<Integer> extraRedisPorts, extraPostgresPorts;
+    // Authentication metadata only. Credentials never enter this serializable scope.
+    public final String authMethod;
+    public final int authPort;
     public ScanConfig(String ip, String hostname, String profile, String ports, int timeoutMs, int concurrency) {
         this(ip, hostname, profile, ports, timeoutMs, concurrency, "", "", false);
     }
     public ScanConfig(String ip, String hostname, String profile, String ports, int timeoutMs, int concurrency, String httpPorts, String httpsPorts, boolean lookupCves) {
+        this(ip,hostname,profile,ports,timeoutMs,concurrency,httpPorts,httpsPorts,lookupCves,false,"","",false,"None",0);
+    }
+    public ScanConfig(String ip, String hostname, String profile, String ports, int timeoutMs, int concurrency, String httpPorts, String httpsPorts, boolean lookupCves, boolean protocolChecks, String redisPorts, String postgresPorts, boolean enumerateTls, String authMethod, int authPort) {
         this.ip = validateIp(ip);
         this.hostname = validateHostname(hostname);
         this.profile = profile;
@@ -33,10 +41,23 @@ public final class ScanConfig implements Serializable {
         this.extraHttpPorts = optionalPorts(httpPorts);
         this.extraHttpsPorts = optionalPorts(httpsPorts);
         this.lookupCves = lookupCves;
-        if (extraHttpPorts.size() + extraHttpsPorts.size() > 32) throw new IllegalArgumentException("Select at most 32 additional protocol ports.");
+        this.protocolChecks = protocolChecks; this.enumerateTls = enumerateTls;
+        this.extraRedisPorts = optionalPorts(redisPorts); this.extraPostgresPorts = optionalPorts(postgresPorts);
+        this.authMethod = authMethod == null ? "None" : authMethod;
+        this.authPort = authPort;
+        if (!java.util.Set.of("None","Basic","Bearer").contains(this.authMethod)) throw new IllegalArgumentException("Choose None, Basic, or Bearer authentication.");
+        if (authenticated() && (!this.ports.contains(authPort) || !https(authPort))) throw new IllegalArgumentException("Authentication needs one selected HTTPS port. Assign an additional HTTPS port if necessary.");
+        if (!authenticated() && authPort != 0) throw new IllegalArgumentException("Authentication port must be empty when authentication is off.");
+        if (extraHttpPorts.size() + extraHttpsPorts.size() + extraRedisPorts.size() + extraPostgresPorts.size() > 32) throw new IllegalArgumentException("Select at most 32 additional protocol ports.");
         if (!this.ports.containsAll(extraHttpPorts) || !this.ports.containsAll(extraHttpsPorts)) throw new IllegalArgumentException("Additional HTTP/HTTPS ports must also be in the TCP scan selection.");
         for (int p : extraHttpPorts) if (extraHttpsPorts.contains(p) || defaultTls(p)) throw new IllegalArgumentException("TCP " + p + " is already assigned to TLS/HTTPS.");
         for (int p : extraHttpsPorts) if (defaultHttp(p)) throw new IllegalArgumentException("TCP " + p + " is already assigned to HTTP.");
+        if (!this.ports.containsAll(extraRedisPorts) || !this.ports.containsAll(extraPostgresPorts)) throw new IllegalArgumentException("Additional Redis/PostgreSQL ports must also be in the TCP scan selection.");
+        if (!protocolChecks && (!extraRedisPorts.isEmpty() || !extraPostgresPorts.isEmpty())) throw new IllegalArgumentException("Enable protocol checks to assign Redis/PostgreSQL ports.");
+        for (int p : extraRedisPorts) if (http(p) || tls(p) || p == 5432 || p == 25 || p == 587 || extraPostgresPorts.contains(p)) throw new IllegalArgumentException("TCP " + p + " has another protocol assignment.");
+        for (int p : extraPostgresPorts) if (http(p) || tls(p) || p == 6379 || p == 25 || p == 587) throw new IllegalArgumentException("TCP " + p + " has another protocol assignment.");
+        if (protocolChecks) for (int p : extraHttpPorts) if (p == 6379 || p == 5432 || p == 25 || p == 587) throw new IllegalArgumentException("TCP " + p + " has another protocol assignment.");
+        if (protocolChecks) for (int p : extraHttpsPorts) if (p == 6379 || p == 5432 || p == 25 || p == 587) throw new IllegalArgumentException("TCP " + p + " has another protocol assignment.");
     }
     private static ArrayList<Integer> optionalPorts(String s) { return s == null || s.trim().isEmpty() ? new ArrayList<>() : parsePorts(s); }
     public static boolean defaultHttp(int p) { return java.util.Set.of(80,3000,5000,5985,8000,8008,8080,8081,8888,9000,9090,9200).contains(p); }
@@ -44,6 +65,10 @@ public final class ScanConfig implements Serializable {
     public boolean http(int p) { return defaultHttp(p) || (extraHttpPorts != null && extraHttpPorts.contains(p)); }
     public boolean https(int p) { return java.util.Set.of(443,2376,5986,8443).contains(p) || (extraHttpsPorts != null && extraHttpsPorts.contains(p)); }
     public boolean tls(int p) { return defaultTls(p) || https(p); }
+    public boolean redis(int p) { return protocolChecks && (p == 6379 || extraRedisPorts != null && extraRedisPorts.contains(p)); }
+    public boolean postgres(int p) { return protocolChecks && (p == 5432 || extraPostgresPorts != null && extraPostgresPorts.contains(p)); }
+    public boolean authenticated() { return authMethod != null && !authMethod.equals("None"); }
+    public String authentication() { return authenticated() ? authMethod + " on HTTPS TCP " + authPort : "Disabled"; }
     public static String validateIp(String value) {
         String ip = value == null ? "" : value.trim();
         try {

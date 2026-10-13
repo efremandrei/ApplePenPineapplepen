@@ -31,6 +31,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import info.hen14.applepen.core.ReportExporter;
 import info.hen14.applepen.core.ScanConfig;
+import info.hen14.applepen.core.AuthCredentials;
 import info.hen14.applepen.core.ScanReport;
 import info.hen14.applepen.core.AppVersion;
 import info.hen14.applepen.core.ReportDiff;
@@ -48,15 +49,18 @@ public final class MainActivity extends Activity {
     private LinearLayout root, content, progressCard;
     private TextView progressText, progressCount;
     private ProgressBar progressBar;
-    private EditText ipInput, hostnameInput, portsInput, timeoutInput, concurrencyInput, httpPortsInput, httpsPortsInput;
-    private CheckBox authorized, cveLookupInput;
-    private Spinner profile;
+    private EditText ipInput, hostnameInput, portsInput, timeoutInput, concurrencyInput, httpPortsInput, httpsPortsInput, redisPortsInput, postgresPortsInput, authPortInput, authUserInput, authSecretInput;
+    private CheckBox authorized, cveLookupInput, protocolInput, tlsVersionsInput;
+    private Spinner profile, authMethodInput;
     private Button startButton;
     private ReportStore store;
     private String ip = "", hostname = "", ports = ScanConfig.QUICK_PORTS, timeout = "800", concurrency = "12", tab = "Scan";
     private int profileIndex;
     private String extraHttp = "", extraHttps = "", findingFilter = "All";
-    private boolean lookupCves;
+    private boolean lookupCves, protocolChecks = true, enumerateTls;
+    private String extraRedis = "", extraPostgres = "", authPort = "";
+    private int authMethodIndex;
+    private AuthCredentials waitingAuth;
     private ScanReport selected, pendingExport;
     private String exportFormat = "", lastFinishedId = "";
     private boolean wasRunning;
@@ -89,6 +93,7 @@ public final class MainActivity extends Activity {
         ports = prefs.getString("ports", ScanConfig.QUICK_PORTS); profileIndex = prefs.getInt("profile", 0);
         timeout = prefs.getString("timeout", "800"); concurrency = prefs.getString("concurrency", "12");
         extraHttp = prefs.getString("extraHttp", ""); extraHttps = prefs.getString("extraHttps", ""); lookupCves = prefs.getBoolean("lookupCves", false);
+        extraRedis = prefs.getString("extraRedis", ""); extraPostgres = prefs.getString("extraPostgres", ""); protocolChecks = prefs.getBoolean("protocolChecks", true); enumerateTls = prefs.getBoolean("enumerateTls", false); authPort = prefs.getString("authPort", ""); authMethodIndex = prefs.getInt("authMethod",0);
         if (saved != null) {
             ip = saved.getString("ip",ip); hostname = saved.getString("hostname",hostname); ports = saved.getString("ports",ports);
             timeout = saved.getString("timeout",timeout); concurrency = saved.getString("concurrency",concurrency);
@@ -96,6 +101,7 @@ public final class MainActivity extends Activity {
             selected = store.load(saved.getString("report")); pendingExport = store.load(saved.getString("exportReport"));
             exportFormat = saved.getString("exportFormat", ""); lastFinishedId = saved.getString("lastFinishedId", "");
             extraHttp = saved.getString("extraHttp",extraHttp); extraHttps = saved.getString("extraHttps",extraHttps); lookupCves = saved.getBoolean("lookupCves",lookupCves);
+            extraRedis = saved.getString("extraRedis",extraRedis); extraPostgres = saved.getString("extraPostgres",extraPostgres); protocolChecks = saved.getBoolean("protocolChecks",protocolChecks); enumerateTls = saved.getBoolean("enumerateTls",enumerateTls); authPort = saved.getString("authPort",authPort); authMethodIndex = saved.getInt("authMethod",authMethodIndex);
             if (Build.VERSION.SDK_INT >= 33) waitingConfig = saved.getSerializable("waitingConfig",ScanConfig.class); else waitingConfig = (ScanConfig)saved.getSerializable("waitingConfig");
         }
         wasRunning = ScanService.state.running;
@@ -103,7 +109,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onResume() { super.onResume(); handler.removeCallbacks(poll); handler.post(poll); }
     @Override protected void onPause() { handler.removeCallbacks(poll); super.onPause(); }
-    @Override protected void onDestroy() { handler.removeCallbacks(poll); io.shutdown(); super.onDestroy(); }
+    @Override protected void onDestroy() { handler.removeCallbacks(poll); io.shutdown(); if (waitingAuth != null) waitingAuth.close(); super.onDestroy(); }
     @Override public void onSaveInstanceState(Bundle out) {
         rememberForm(); out.putString("ip",ip); out.putString("hostname",hostname); out.putString("ports",ports);
         out.putString("timeout",timeout); out.putString("concurrency",concurrency); out.putInt("profile",profileIndex);
@@ -111,6 +117,7 @@ public final class MainActivity extends Activity {
         out.putString("exportReport",pendingExport == null ? null : pendingExport.id); out.putString("exportFormat",exportFormat);
         out.putString("lastFinishedId",lastFinishedId); super.onSaveInstanceState(out);
         out.putString("extraHttp",extraHttp); out.putString("extraHttps",extraHttps); out.putBoolean("lookupCves",lookupCves); out.putSerializable("waitingConfig",waitingConfig);
+        out.putString("extraRedis",extraRedis); out.putString("extraPostgres",extraPostgres); out.putBoolean("protocolChecks",protocolChecks); out.putBoolean("enumerateTls",enumerateTls); out.putString("authPort",authPort); out.putInt("authMethod",authMethodIndex);
     }
     private int dp(int value) { return Math.round(getResources().getDisplayMetrics().density * value); }
     private LinearLayout column() { LinearLayout v = new LinearLayout(this); v.setOrientation(LinearLayout.VERTICAL); return v; }
@@ -183,11 +190,24 @@ public final class MainActivity extends Activity {
         LinearLayout additional = card(); additional.addView(text("Additional web checks",18,INK,true));
         httpPortsInput = field(additional,"Additional HTTP ports","8089,10080",extraHttp,false);
         httpsPortsInput = field(additional,"Additional HTTPS ports","9443,10443",extraHttps,false);
-        additional.addView(text("Include these ports in the TCP selection above. HTTP checks send one root request; other ports receive greeting checks only.",12,MUTED,false));
+        additional.addView(text("Include these ports in the TCP selection above. HTTP checks send one root request; Other unassigned ports receive greeting checks only.",12,MUTED,false));
         cveLookupInput = new CheckBox(this); cveLookupInput.setText("Look up detected versions in NVD"); cveLookupInput.setChecked(lookupCves); cveLookupInput.setTextColor(INK); additional.addView(cveLookupInput);
         additional.addView(text("Optional online lookup sends product/version data to NVD, without your target IP or hostname. Results are potential CVEs; patch status remains unverified. Internet access is needed for uncached results.",12,MUTED,false)); content.addView(additional);
+        LinearLayout protocols = card(); protocols.addView(text("Read-only protocol checks",18,INK,true));
+        protocolInput = new CheckBox(this); protocolInput.setText("Check Redis, PostgreSQL and SMTP"); protocolInput.setChecked(protocolChecks); protocols.addView(protocolInput);
+        redisPortsInput = field(protocols,"Additional Redis ports","16379",extraRedis,false);
+        postgresPortsInput = field(protocols,"Additional PostgreSQL ports","15432",extraPostgres,false);
+        protocols.addView(text("Redis PING/INFO server, PostgreSQL TLS negotiation, and SMTP EHLO/STARTTLS. No key access, database login, or email delivery. Standard ports are checked when selected.",12,MUTED,false));
+        tlsVersionsInput = new CheckBox(this); tlsVersionsInput.setText("Probe TLS 1.0, 1.1, 1.2 and 1.3"); tlsVersionsInput.setChecked(enumerateTls); protocols.addView(tlsVersionsInput);
+        protocols.addView(text("Adds up to four handshakes per direct TLS listener. Failed probes are inconclusive; phone restrictions may block old TLS versions.",12,MUTED,false)); content.addView(protocols);
+        LinearLayout auth = card(); auth.addView(text("Credentialed HTTPS · optional",18,INK,true));
+        authMethodInput = new Spinner(this); authMethodInput.setContentDescription("Authentication method"); authMethodInput.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"None","Basic","Bearer"})); authMethodInput.setSelection(authMethodIndex); auth.addView(authMethodInput);
+        authPortInput = field(auth,"Authentication HTTPS port","443 or assigned HTTPS port",authPort,true);
+        authUserInput = field(auth,"Basic username","For Basic only","",false); authUserInput.setSaveEnabled(false); authUserInput.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
+        authSecretInput = field(auth,"Password or Bearer token","Used for this assessment only","",false); authSecretInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD); authSecretInput.setSaveEnabled(false); authSecretInput.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
+        auth.addView(text("One HTTPS GET / with your credential, after certificate and hostname verification. Self-signed or mismatched servers block the request. No redirects. Credentials are never saved; enter them again for each scan. Report text and cookie names from this response are omitted.",12,MUTED,false)); content.addView(auth);
         LinearLayout scope = card(); scope.addView(text("03  Assessment scope",18,INK,true));
-        scope.addView(text("TCP discovery · service banners · HTTP configuration · TLS certificates. No credential guessing or exploit execution. Coverage is recorded in every report.",14,MUTED,false));
+        scope.addView(text("TCP discovery · service banners · HTTP configuration · TLS certificates · read-only protocol checks. No credential guessing or exploit execution. Coverage is recorded in every report.",14,MUTED,false));
         authorized = new CheckBox(this); authorized.setText("I own this target or have permission to assess it."); authorized.setTextColor(INK); scope.addView(authorized); content.addView(scope);
         startButton = button(ScanService.state.running ? "Stop scan" : "Start assessment",true,this::startOrStop); content.addView(startButton,new LinearLayout.LayoutParams(-1,dp(54)));
         content.addView(text("Reports stay on this device. Export only when you choose.",12,MUTED,false));
@@ -196,27 +216,31 @@ public final class MainActivity extends Activity {
         if (ipInput == null) return;
         ipInput.setEnabled(enabled); hostnameInput.setEnabled(enabled); timeoutInput.setEnabled(enabled);
         concurrencyInput.setEnabled(enabled); profile.setEnabled(enabled); portsInput.setEnabled(enabled && profileIndex == 3); authorized.setEnabled(enabled);
-        httpPortsInput.setEnabled(enabled); httpsPortsInput.setEnabled(enabled); cveLookupInput.setEnabled(enabled);
+        httpPortsInput.setEnabled(enabled); httpsPortsInput.setEnabled(enabled); cveLookupInput.setEnabled(enabled); protocolInput.setEnabled(enabled); tlsVersionsInput.setEnabled(enabled); redisPortsInput.setEnabled(enabled); postgresPortsInput.setEnabled(enabled); authMethodInput.setEnabled(enabled); authPortInput.setEnabled(enabled); authUserInput.setEnabled(enabled); authSecretInput.setEnabled(enabled);
     }
     private void rememberForm() {
         if (ipInput == null) return;
         ip = ipInput.getText().toString(); hostname = hostnameInput.getText().toString(); ports = portsInput.getText().toString();
         timeout = timeoutInput.getText().toString(); concurrency = concurrencyInput.getText().toString();
         extraHttp = httpPortsInput.getText().toString(); extraHttps = httpsPortsInput.getText().toString(); lookupCves = cveLookupInput.isChecked();
+        extraRedis = redisPortsInput.getText().toString(); extraPostgres = postgresPortsInput.getText().toString(); protocolChecks = protocolInput.isChecked(); enumerateTls = tlsVersionsInput.isChecked(); authPort = authPortInput.getText().toString(); authMethodIndex = authMethodInput.getSelectedItemPosition();
     }
     private void startOrStop() {
         if (ScanService.state.running) { startService(new Intent(this,ScanService.class).setAction(ScanService.CANCEL)); return; }
         rememberForm();
         if (!authorized.isChecked()) { toast("Confirm permission for this target before starting."); return; }
         try {
-            waitingConfig = new ScanConfig(ip,hostname,PROFILES[profileIndex],ports,Integer.parseInt(timeout),Integer.parseInt(concurrency),extraHttp,extraHttps,lookupCves);
+            waitingConfig = new ScanConfig(ip,hostname,PROFILES[profileIndex],ports,Integer.parseInt(timeout),Integer.parseInt(concurrency),extraHttp,extraHttps,lookupCves,protocolChecks,extraRedis,extraPostgres,enumerateTls,new String[]{"None","Basic","Bearer"}[authMethodIndex],authMethodIndex == 0 ? 0 : Integer.parseInt(authPort));
+            if (waitingAuth != null) waitingAuth.close(); waitingAuth = null;
+            if (waitingConfig.authenticated()) waitingAuth = new AuthCredentials(waitingConfig.authMethod,authUserInput.getText().toString(),authSecretInput.getText().toString());
             getPreferences(MODE_PRIVATE).edit().putString("ip",ip).putString("hostname",hostname).putString("ports",ports).putInt("profile",profileIndex).putString("timeout",timeout).putString("concurrency",concurrency).apply();
             getPreferences(MODE_PRIVATE).edit().putString("extraHttp",extraHttp).putString("extraHttps",extraHttps).putBoolean("lookupCves",lookupCves).apply();
+            getPreferences(MODE_PRIVATE).edit().putString("extraRedis",extraRedis).putString("extraPostgres",extraPostgres).putBoolean("protocolChecks",protocolChecks).putBoolean("enumerateTls",enumerateTls).putString("authPort",authPort).putInt("authMethod",authMethodIndex).apply();
             if (Build.VERSION.SDK_INT >= 37 && getApplicationInfo().targetSdkVersion >= 37 && checkSelfPermission("android.permission.ACCESS_LOCAL_NETWORK") != PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(new String[]{"android.permission.ACCESS_LOCAL_NETWORK"},102); return;
             }
             requestNotificationAndStart();
-        } catch (NumberFormatException e) { toast("Timeout and connection count must be numbers."); }
+        } catch (NumberFormatException e) { toast("Timeout, connection count, and authentication port must be numbers."); }
         catch (IllegalArgumentException e) { toast(e.getMessage()); }
     }
     private void requestNotificationAndStart() {
@@ -225,8 +249,12 @@ public final class MainActivity extends Activity {
     }
     private void launchScan() {
         if (waitingConfig == null) return;
-        try { startForegroundService(new Intent(this,ScanService.class).setAction(ScanService.START).putExtra("config",waitingConfig)); wasRunning = true; waitingConfig = null; }
-        catch (Exception e) { toast("Could not start scan: " + e.getMessage()); }
+        if (waitingConfig.authenticated() && waitingAuth == null) { waitingConfig = null; toast("Enter credentials again after the screen was recreated."); return; }
+        try {
+            ScanService.prepareCredentials(waitingAuth); waitingAuth = null;
+            startForegroundService(new Intent(this,ScanService.class).setAction(ScanService.START).putExtra("config",waitingConfig)); wasRunning = true; waitingConfig = null;
+            authUserInput.setText(""); authSecretInput.setText("");
+        } catch (Exception e) { ScanService.prepareCredentials(null); toast("Could not start scan: " + e.getMessage()); }
     }
     @Override public void onRequestPermissionsResult(int request, String[] permissions, int[] grants) {
         super.onRequestPermissionsResult(request,permissions,grants);
@@ -305,6 +333,8 @@ public final class MainActivity extends Activity {
     private void rescan(ScanReport report) {
         ScanConfig c = report.config; ip = c.ip; hostname = c.hostname; ports = joinPorts(c.ports); profileIndex = 3;
         timeout = String.valueOf(c.timeoutMs); concurrency = String.valueOf(c.concurrency); extraHttp = joinPorts(c.extraHttpPorts); extraHttps = joinPorts(c.extraHttpsPorts); lookupCves = c.lookupCves;
+        protocolChecks = c.protocolChecks; enumerateTls = c.enumerateTls; extraRedis = joinPorts(c.extraRedisPorts); extraPostgres = joinPorts(c.extraPostgresPorts); authMethodIndex = 0; authPort = "";
+        if (c.authenticated()) toast("Credentialed check is off for rescan. Select the method and enter credentials again.");
         tab = "Scan"; render();
     }
     private String joinPorts(List<Integer> values) {

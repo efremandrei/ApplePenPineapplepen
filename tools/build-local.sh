@@ -23,7 +23,7 @@ text = open(sys.argv[1]).read().replace('<manifest ', '<manifest package="info.h
 open(sys.argv[2], 'w').write(text)
 PY
 "$task_tools/aapt2" link -o "$task_build/unsigned.apk" -I "$task_android" \
-  --manifest "$task_build/AndroidManifest.xml" --java "$task_build/generated" --debug-mode \
+  --manifest "$task_build/AndroidManifest.xml" --java "$task_build/generated" \
   --min-sdk-version 30 --target-sdk-version 36 --version-code "$task_code" --version-name "$task_version" \
   "${task_resources[@]}"
 find "$project_dir/app/src/main/java" "$task_build/generated" -name '*.java' -print > "$task_build/sources.txt"

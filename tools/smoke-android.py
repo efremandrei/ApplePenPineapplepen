@@ -5,6 +5,9 @@ import json
 import pathlib
 import re
 import subprocess
+import socketserver
+import ssl
+import tempfile
 import threading
 import time
 import xml.etree.ElementTree as ET
@@ -52,9 +55,7 @@ def click(text, scroll=False):
 
 def fill(label, value):
     tap(find(lambda n: n.get("content-desc") == label, scroll=True))
-    adb("shell", "input", "keyevent", "KEYCODE_MOVE_END")
-    adb("shell", "input", "keyevent", "--longpress", "KEYCODE_DEL")
-    # Inputs used here are initially empty, except the TCP selection handled below.
+    adb("shell", "input", "keycombination", "113", "29")  # Ctrl+A
     adb("shell", "input", "text", value)
     adb("shell", "input", "keyevent", "KEYCODE_BACK")
 
@@ -72,10 +73,76 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         pass
 
 
+class RedisFixture(socketserver.BaseRequestHandler):
+    def handle(self):
+        stream = self.request.makefile("rb")
+        if not stream.readline():
+            return
+        assert stream.readline() == b"$4\r\n" and stream.readline() == b"PING\r\n"
+        self.request.sendall(b"+PONG\r\n")
+        assert [stream.readline() for _ in range(5)] == [b"*2\r\n", b"$4\r\n", b"INFO\r\n", b"$6\r\n", b"server\r\n"]
+        body = b"# Server\r\nredis_version:7.4.1\r\nconfig_file:private-fixture-path\r\n"
+        self.request.sendall(b"$" + str(len(body)).encode() + b"\r\n" + body + b"\r\n")
+
+
+class PostgresFixture(socketserver.BaseRequestHandler):
+    def handle(self):
+        data = self.request.makefile("rb").read(8)
+        if data:
+            assert data == bytes([0, 0, 0, 8, 4, 210, 22, 47])
+            self.request.sendall(b"N")
+
+
+class SmtpFixture(socketserver.BaseRequestHandler):
+    def handle(self):
+        try:
+            self.request.sendall(b"220 owned fixture ESMTP\r\n")
+            line = self.request.makefile("rb").readline()
+            if line:
+                assert line == b"EHLO applepen.invalid\r\n"
+                self.request.sendall(b"250 owned fixture\r\n")
+        except (ConnectionResetError, BrokenPipeError):
+            pass
+
+
+class SecureFixture(socketserver.BaseRequestHandler):
+    def handle(self):
+        try:
+            with tls_context.wrap_socket(self.request, server_side=True) as connection:
+                reader = connection.makefile("rb")
+                first = reader.readline()
+                if not first:
+                    return
+                headers = []
+                while True:
+                    line = reader.readline()
+                    if line in (b"\r\n", b""):
+                        break
+                    headers.append(line)
+                credential_requests.extend(line for line in headers if line.lower().startswith(b"authorization:"))
+                connection.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}")
+        except (ssl.SSLError, ConnectionResetError, BrokenPipeError):
+            pass
+
+
+class TcpFixture(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
 fixture = http.server.ThreadingHTTPServer(("127.0.0.1", 8089), Fixture)
-threading.Thread(target=fixture.serve_forever, daemon=True).start()
+servers = [fixture, TcpFixture(("127.0.0.1", 16379), RedisFixture), TcpFixture(("127.0.0.1", 15432), PostgresFixture), TcpFixture(("127.0.0.1", 1587), SmtpFixture), TcpFixture(("127.0.0.1", 9443), SecureFixture)]
+credential_requests = []
+tls_temp = tempfile.TemporaryDirectory(prefix="applepen-smoke-tls-")
+cert = pathlib.Path(tls_temp.name) / "cert.pem"
+key = pathlib.Path(tls_temp.name) / "key.pem"
+subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", str(key), "-out", str(cert), "-days", "2", "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost,IP:10.0.2.2"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+tls_context.load_cert_chain(cert, key)
+for server in servers:
+    threading.Thread(target=server.serve_forever, daemon=True).start()
 try:
-    adb("install", "-r", str(ROOT / "downloads/ApplePen-v0.1.0.apk"))
+    # Seed a real v0.2 report, then verify that the signed v0.3 update keeps it.
     adb("install", "-r", str(ROOT / "downloads/ApplePen-v0.2.0.apk"))
     adb("shell", "pm", "grant", PACKAGE, "android.permission.POST_NOTIFICATIONS")
     adb("shell", "am", "start", "-W", "-n", PACKAGE + "/.MainActivity")
@@ -83,16 +150,30 @@ try:
     fill("Destination IP", "10.0.2.2")
     tap(find(lambda n: n.get("class") == "android.widget.Spinner", scroll=True))
     click("Custom ports")
-    field = find(lambda n: n.get("content-desc") == "TCP ports", scroll=True)
-    tap(field)
-    # Select all through the observed editor rather than relying on repeated delete counts.
-    adb("shell", "input", "keycombination", "113", "29")  # Ctrl+A
-    adb("shell", "input", "text", "8089")
-    adb("shell", "input", "keyevent", "KEYCODE_BACK")
+    fill("TCP ports", "8089")
     fill("Additional HTTP ports", "8089")
     click("I own this target or have permission to assess it.", scroll=True)
     click("Start assessment", scroll=True)
     find(lambda n: "1 open ports" in n.get("text", ""), attempts=25)
+    adb("install", "-r", str(ROOT / "downloads/ApplePen-v0.3.0.apk"))
+    adb("shell", "am", "start", "-W", "-n", PACKAGE + "/.MainActivity")
+    click("History")
+    find(lambda n: n.get("text") == "10.0.2.2")
+    click("Rescan this target", scroll=True)
+    fill("TCP ports", "8089,9443,15432,1587,16379")
+    fill("Additional HTTPS ports", "9443")
+    # Rescan restores v0.2 scope with new protocol probes off, then enable them explicitly.
+    click("Check Redis, PostgreSQL and SMTP", scroll=True)
+    fill("Additional Redis ports", "16379")
+    fill("Additional PostgreSQL ports", "15432")
+    click("Probe TLS 1.0, 1.1, 1.2 and 1.3", scroll=True)
+    tap(find(lambda n: n.get("content-desc") == "Authentication method", scroll=True))
+    click("Bearer")
+    fill("Authentication HTTPS port", "9443")
+    fill("Password or Bearer token", "fake-smoke-token")
+    click("I own this target or have permission to assess it.", scroll=True)
+    click("Start assessment", scroll=True)
+    find(lambda n: "5 open ports" in n.get("text", ""), attempts=40)
     (OUT / "report.png").write_bytes(adb("exec-out", "screencap", "-p"))
     # Exercise the native document picker and all three exporter paths.
     for format_, signature in [("PDF", b"%PDF-"), ("HTML", b"<!doctype html>"), ("JSON", b"{")]:
@@ -110,14 +191,29 @@ try:
         if format_ == "JSON":
             report = json.loads(destination.read_text())
             assert report["targetIp"] == "10.0.2.2"
-            assert report["services"][0]["service"] == "HTTP"
+            services = {s["port"]: s["service"] for s in report["services"]}
+            assert services == {1587: "SMTP-compatible", 8089: "HTTP", 9443: "HTTPS", 15432: "PostgreSQL-compatible", 16379: "Redis-compatible"}
             assert report["configuration"]["lookupCves"] is False
-            assert report["counts"]["open"] == 1
+            assert report["counts"]["open"] == 5
+            assert report["schemaVersion"] == 3
+            assert report["configuration"]["authMethod"] == "Bearer"
+            assert any("blocked before sending Authorization" in line for line in report["coverage"])
+            assert any("TLSv1.2 accepted" in line for line in report["coverage"])
+            assert "fake-smoke-token" not in destination.read_text()
+            assert "private-fixture-path" not in destination.read_text()
+            assert not credential_requests, "Untrusted fixture received Authorization"
     click("History")
     find(lambda n: n.get("text") == "10.0.2.2")
     click("Rescan this target", scroll=True)
     find(lambda n: n.get("content-desc") == "Destination IP" and n.get("text") == "10.0.2.2")
-    print("Emulator smoke passed: signed upgrade, form, foreground scan, history, rescan, PDF/HTML/JSON exports.", flush=True)
+    fill("Additional Redis ports", "16379")
+    tap(find(lambda n: n.get("content-desc") == "Authentication method", scroll=True))
+    click("None")
+    find(lambda n: n.get("content-desc") == "Password or Bearer token" and n.get("text") == "", scroll=True)
+    print("Emulator smoke passed: signed upgrade with retained history, protocol scans, TLS probes, blocked untrusted authentication, cleared credentials, rescan, PDF/HTML/JSON exports.", flush=True)
 finally:
-    fixture.shutdown()
+    for server in servers:
+        server.shutdown()
+        server.server_close()
+    tls_temp.cleanup()
     (OUT / "logcat.txt").write_bytes(adb("logcat", "-d", "-t", "1500"))

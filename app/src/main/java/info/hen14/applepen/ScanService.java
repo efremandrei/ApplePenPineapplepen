@@ -13,6 +13,7 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 import info.hen14.applepen.core.ScanConfig;
+import info.hen14.applepen.core.AuthCredentials;
 import info.hen14.applepen.core.ScanEngine;
 import info.hen14.applepen.core.ScanReport;
 import java.util.concurrent.ExecutorService;
@@ -32,6 +33,11 @@ public final class ScanService extends Service {
     private NotificationManager notifications;
     private long lastNotification;
     private PowerManager.WakeLock wakeLock;
+    private static AuthCredentials pendingCredentials;
+    static synchronized void prepareCredentials(AuthCredentials credentials) {
+        if (pendingCredentials != null) pendingCredentials.close(); pendingCredentials = credentials;
+    }
+    private static synchronized AuthCredentials takeCredentials() { AuthCredentials result = pendingCredentials; pendingCredentials = null; return result; }
     @Override public void onCreate() {
         super.onCreate();
         notifications = getSystemService(NotificationManager.class);
@@ -45,7 +51,7 @@ public final class ScanService extends Service {
         if (Build.VERSION.SDK_INT >= 33) config = intent.getSerializableExtra("config", ScanConfig.class);
         else config = (ScanConfig) intent.getSerializableExtra("config");
         if (config == null) { stopSelf(); return START_NOT_STICKY; }
-        engine = new ScanEngine(new NvdClient(getCacheDir()));
+        engine = new ScanEngine(new NvdClient(getCacheDir()),takeCredentials());
         state.running = true; state.completed = 0; state.total = config.ports.size();
         state.message = "Starting scan"; state.report = null; state.persistenceError = "";
         Notification notification = notification();
