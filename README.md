@@ -4,7 +4,7 @@ A native Android app that assesses one destination IP and produces an evidence-b
 
 ## Install
 
-Download [ApplePen-v0.3.0.apk](downloads/ApplePen-v0.3.0.apk) from this repository. Open the APK on Android and allow installation from that source when prompted. Requires **Android 11 or newer**. The APK uses the same development signing key as the shipped v0.1.0/v0.2.0 APKs, so it can be installed as an update while retaining local history.
+Download [ApplePen-v0.4.0.apk](downloads/ApplePen-v0.4.0.apk) from this repository. Open the APK on Android and allow installation from that source when prompted. Requires **Android 11 or newer**. The APK uses the same development signing key as the shipped v0.1.0/v0.2.0/v0.3.0 APKs, so it can be installed as an update while retaining local history.
 
 The app label is **ApplePen**; the package is `info.hen14.applepen`.
 
@@ -38,7 +38,7 @@ A visible foreground service and notification allow scans to continue when you s
 | SMTP | EHLO and advertised STARTTLS on selected 25/587 or recognized SMTP greetings on other ports. Certificate inspection after upgrade. No AUTH, MAIL, RCPT, DATA, relay testing, or email delivery. Missing STARTTLS is informational. |
 | Credentialed HTTPS | One GET / on one explicitly selected HTTPS port with supplied Basic or Bearer credentials. Normal system trust and endpoint identity verification, pinned destination IP, no redirects. Reports numeric status and header/cookie checks; response text, cookie names, and arbitrary header values are discarded. A 2xx response alone does not establish credential acceptance. |
 | Findings | Severity, confidence, observed/suspected status, evidence, impact, remediation, and references. |
-| Optional CVE candidates | Version-bearing OpenSSH, nginx, Apache HTTP Server, and vsftpd fingerprints are resolved against NVD's CPE dictionary. Exact non-deprecated version matches are queried through the CVE API. Records are labeled Potential CVE with Low confidence, even when NVD's CVSS severity is high. |
+| Optional CVE candidates | Version-bearing OpenSSH, nginx, Apache HTTP Server, and vsftpd fingerprints are resolved against NVD's CPE dictionary. Exact non-deprecated version matches are queried through the CVE API. Supported CPE configurations and numeric version ranges are reviewed, with separate matched-rule, unverified-prerequisite, and unknown classifications. Clear product/version exclusions are audited in coverage. Retained records stay Potential CVE with Low confidence, even when NVD's CVSS severity is high. |
 | Reporting | Local history for 30 reports; paginated PDF, self-contained HTML, and schema-versioned JSON exports. |
 | Comparison and rescan | Reuse a saved configuration from History. Compare two completed scans for the same target, port/protocol scope, CVE setting, and connection type. Save/export comparisons. Missing findings are labeled Not observed again, not Fixed. Credentialed reports cannot be compared because account identity is deliberately not retained. |
 | Interrupted runs | Marks a saved run as interrupted after process death. Completed/cancelled runs are retained. |
@@ -53,11 +53,25 @@ Lookup is off by default and requires no API key. It uses the official [NVD CPE 
 
 Queries are spaced at least 7 seconds apart, with at most 3 distinct product/version pairs per scan and one 20-record CVE page per product. Responses are bounded, strictly parsed, and cached for 24 hours with source timestamps in reports. Missing dictionary matches, outages, timeouts, rate limits, and capped results are recorded as coverage limitations. Empty results never establish that a service is secure. Vendor backports, spoofed banners, and configuration prerequisites require separate verification.
 
-## Scope of v0.3
+### CVE applicability review
+
+The app reads the current [NVD API schema](https://csrc.nist.gov/schema/nvd/api/2.0/cve_api_json_2.0.schema) configuration/node/CPE-match structure. It evaluates inclusive and exclusive version bounds for supported numeric release formats and OpenSSH portable versions. Exact CPE dictionary matching no longer strips arbitrary punctuation, and generic dictionary names are preferred when present in the first page.
+
+Each retained CVE has one of three applicability labels:
+
+- **Product/version rule matched**: a supported configuration contains a vulnerable product rule compatible with the banner. This is source-rule evidence, not proof of a vulnerable installation.
+- **Configuration prerequisites unverified**: a product/version rule matches but an AND condition, platform, edition, language, or other environment requirement is unknown.
+- **Applicability unknown**: missing/malformed data, wildcard product patterns, ambiguous portable-version boundaries, unsupported suffixes, negated/nested rules, newer affected-source data, or evaluation limits prevent a reliable decision.
+
+Other products are treated as unknown environment facts, never assumed absent. `vulnerable=false` entries are prerequisites, not findings that a component is safe. A candidate is excluded only for a clear mismatch with the observed product/version across supported positive vulnerable-product rules; the CVE ID, reason, source link, and bounded rule evidence remain in coverage. Exclusions say nothing about other installed software or host security. An unknown alternative prevents exclusion.
+
+Work is capped at 32 configurations, 128 nodes, and 512 CPE rules per CVE, with at most 12 saved evidence lines. Matching product rules are prioritized, and omitted evidence is marked. Exclusion evidence is limited to three lines per CVE, with a truncation note. The existing page/product/network limits still apply. This is a conservative subset of CPE applicability analysis, not a complete CPE implementation, package inventory, or patch verifier.
+
+## Scope of v0.4
 
 This release is an automated network security assessment. It does **not** perform exhaustive TLS cipher enumeration, UDP/raw-packet scans, OS fingerprinting, exploit execution, password attacks, database/key access, authenticated crawling, or application business-logic testing. Failed handshakes are not taken as proof of secure TLS settings. Banner versions and CVE candidates are never reported as verified vulnerabilities.
 
-Future work: stronger CVE configuration/range applicability checks, more protocol modules, authenticated endpoint selection, and an optional privately hosted Linux scanning engine.
+Future work: more protocol modules, authenticated endpoint selection, additional affected-source formats, and an optional privately hosted Linux scanning engine.
 
 ## Privacy and permissions
 
@@ -75,7 +89,7 @@ Open in Android Studio, or use JDK 17 and an Android SDK:
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-The project uses AGP 8.12.2, Gradle 8.13, compile/target API 36, and minimum API 30. There are no third-party runtime dependencies. Tests use JUnit 4.13.2. GitHub Actions builds an APK, uploads test/lint reports, then runs an Android 16 emulator smoke test against an owned HTTP fixture. The smoke test seeds a v0.2 report, updates to v0.3, verifies retained history, then scans owned HTTP/TLS/Redis/PostgreSQL/SMTP fixtures. It checks TLS probes, untrusted-certificate credential blocking, cleared credential fields, rescan, and PDF/HTML/JSON exports. Repository permissions remain read-only.
+The project uses AGP 8.12.2, Gradle 8.13, compile/target API 36, and minimum API 30. There are no third-party runtime dependencies. Tests use JUnit 4.13.2. GitHub Actions builds an APK, uploads test/lint reports, then runs an Android 16 emulator smoke test against an owned HTTP fixture. The smoke test seeds a v0.3 report, updates to v0.4, verifies retained history, then scans owned HTTP/TLS/Redis/PostgreSQL/SMTP fixtures. It checks TLS probes, untrusted-certificate credential blocking, cleared credential fields, rescan, and PDF/HTML/JSON exports. Repository permissions remain read-only.
 
 For environments with SDK tools installed but Maven access unavailable:
 
@@ -100,4 +114,4 @@ See [VALIDATION.md](VALIDATION.md) for the shipped build's verification and know
 
 ## Upgrade and report compatibility
 
-The v0.3.0 APK has version code 3 and retains v0.1.0/v0.2.0 report serialization compatibility. Original scanner versions remain attached to old reports. New settings default to off when reading old reports, preserving their original scope. JSON schema 3 adds read-only protocol assignments, TLS-probe settings, and authentication method/port metadata, with no credentials. Rescanning a credentialed report disables authentication until the method and credentials are entered again. Comparison requires identical protocol/TLS settings and excludes credentialed reports because account identity is not stored. Detection-rule changes across scanner versions are recorded as a comparison caveat.
+The v0.4.0 APK has version code 4 and keeps v0.1/v0.2/v0.3 report serialization compatibility. Old CVE findings have no newly invented applicability metadata and retain their original scanner version. JSON schema 4 adds a nullable `cveAssessment` object per finding with product, version, dictionary CPE, applicability label, reason, and bounded rule evidence. PDF/HTML exports include the same assessment in finding evidence. Comparison notices changed applicability classifications and records scanner-version changes. Credentialed reports remain excluded from comparisons because account identity is not stored.

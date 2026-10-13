@@ -316,6 +316,7 @@ public final class MainActivity extends Activity {
             if (shownFindings++ >= 200) { content.addView(text("Showing the first 200 findings. Export the report for the complete list.",14,MUTED,false)); break; }
             LinearLayout c = card(); c.addView(text(f.severity.toUpperCase(java.util.Locale.ROOT) + " · TCP " + f.port,12,severityColor(f.severity),true));
             c.addView(text(f.title,18,INK,true)); c.addView(text(f.status + " · " + f.confidence + " confidence",12,MUTED,false));
+            if (f.cve != null) c.addView(text(f.cve.applicability,13,TEAL,true));
             TextView evidence = text("Evidence\n" + f.evidence,13,INK,false); evidence.setTextIsSelectable(true); c.addView(evidence);
             c.addView(text("Impact\n" + f.impact,14,MUTED,false)); c.addView(text("Remediation\n" + f.remediation,14,INK,false)); content.addView(c);
             if (f.reference.startsWith("https://")) c.addView(button("Open reference",false,() -> { try { startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(f.reference))); } catch (Exception e) { toast("No browser available."); } }));

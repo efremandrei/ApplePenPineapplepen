@@ -28,7 +28,7 @@ public final class ReportDiff implements Serializable {
         for (Map.Entry<String,ScanReport.Finding> entry : now.entrySet()) {
             ScanReport.Finding previous = old.get(entry.getKey()), current = entry.getValue();
             if (previous == null) { d.newFindings++; d.changes.add("Newly observed · TCP " + current.port + " · " + current.title); }
-            else if (!previous.severity.equals(current.severity) || !previous.status.equals(current.status) || !previous.confidence.equals(current.confidence)) { d.changedFindings++; d.changes.add("Changed classification · TCP " + current.port + " · " + current.title); }
+            else if (!previous.severity.equals(current.severity) || !previous.status.equals(current.status) || !previous.confidence.equals(current.confidence) || !Objects.equals(previous.cve == null ? null : previous.cve.applicability,current.cve == null ? null : current.cve.applicability)) { d.changedFindings++; d.changes.add("Changed classification · TCP " + current.port + " · " + current.title); }
             else d.retainedFindings++;
         }
         for (Map.Entry<String,ScanReport.Finding> entry : old.entrySet()) if (!now.containsKey(entry.getKey())) { d.missingFindings++; d.changes.add("Not observed again · TCP " + entry.getValue().port + " · " + entry.getValue().title); }

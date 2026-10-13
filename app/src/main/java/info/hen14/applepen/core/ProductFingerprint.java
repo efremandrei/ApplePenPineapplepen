@@ -13,6 +13,7 @@ public final class ProductFingerprint {
         String version = "([0-9]+(?:\\.[0-9]+){1,3}(?:p[0-9]+)?)";
         Matcher ssh = Pattern.compile("^SSH-(?:2\\.0|1\\.99|1\\.5)-OpenSSH_" + version + "(?:[\\s_-]|$)",Pattern.CASE_INSENSITIVE).matcher(evidence);
         if (ssh.find()) return new ProductFingerprint("OpenSSH",ssh.group(1),"openssh",Set.of("openbsd"));
+        version = "([0-9]+(?:\\.[0-9]+){1,3})";
         Matcher nginx = Pattern.compile("(?im)^Server:\\s*nginx/" + version + "(?:[\\s;]|$)").matcher(evidence);
         if (nginx.find()) return new ProductFingerprint("nginx",nginx.group(1),"nginx",Set.of("nginx","f5"));
         Matcher apache = Pattern.compile("(?im)^Server:\\s*Apache/" + version + "(?:[\\s;]|$)").matcher(evidence);
@@ -23,10 +24,19 @@ public final class ProductFingerprint {
     }
     public String query() { return name + " " + version; }
     public boolean matchesCpe(String cpe) {
-        String[] fields = cpe.split(":",-1);
-        if (fields.length != 13 || !fields[0].equals("cpe") || !fields[1].equals("2.3") || !fields[2].equals("a") || !vendors.contains(fields[3]) || !product.equals(fields[4])) return false;
-        String update = fields[6].equals("*") || fields[6].equals("-") ? "" : fields[6];
-        return normalize(fields[5] + update).equals(normalize(version));
+        CpeName fields=CpeName.parse(cpe);
+        if (fields==null || family(fields)!=1) return false;
+        String update=fields.field(6);
+        String version=fields.field(5);
+        if (!update.equals("*") && !update.equals("-")) {
+            if (!product.equals("openssh") || !update.matches("p[0-9]{1,9}") || VersionNumbers.parse(version)==null || VersionNumbers.parse(version).hasPortable()) return false;
+            version+=update;
+        }
+        return VersionNumbers.parse(version)!=null && version.equals(this.version.toLowerCase(Locale.ROOT));
     }
-    private static String normalize(String s) { return s.toLowerCase(Locale.ROOT).replace("_","").replace("-",""); }
+    /** 1 = exact supported family, 0 = a different literal family, -1 = unsupported/wildcard. */
+    public int family(CpeName fields) {
+        if (!fields.literal(2) || !fields.literal(3) || !fields.literal(4)) return -1;
+        return fields.field(2).equals("a") && vendors.contains(fields.field(3)) && product.equals(fields.field(4)) ? 1 : 0;
+    }
 }

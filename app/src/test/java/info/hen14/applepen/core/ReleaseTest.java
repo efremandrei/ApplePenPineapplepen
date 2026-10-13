@@ -110,7 +110,7 @@ public class ReleaseTest {
     @Test public void comparisonExportsRoundTripAsValidJson() {
         ScanReport before=report("80"),after=report("80"); after.findings.add(finding("<New>")); after.comparison=ReportDiff.compare(before,after);
         Map<String,Object> json=JsonReader.object(JsonReader.parse(ReportExporter.json(after)));
-        assertEquals(3,JsonReader.integer(json.get("schemaVersion")));
+        assertEquals(4,JsonReader.integer(json.get("schemaVersion")));
         assertEquals(1,JsonReader.integer(JsonReader.object(json.get("comparison")).get("newFindings")));
         assertTrue(ReportExporter.html(after).contains("&lt;New&gt;")); assertTrue(ReportExporter.text(after).contains("COMPARISON"));
     }

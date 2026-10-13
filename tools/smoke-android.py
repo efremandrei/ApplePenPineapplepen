@@ -142,8 +142,8 @@ tls_context.load_cert_chain(cert, key)
 for server in servers:
     threading.Thread(target=server.serve_forever, daemon=True).start()
 try:
-    # Seed a real v0.2 report, then verify that the signed v0.3 update keeps it.
-    adb("install", "-r", str(ROOT / "downloads/ApplePen-v0.2.0.apk"))
+    # Seed a real v0.3 report, then verify that the signed v0.4 update keeps it.
+    adb("install", "-r", str(ROOT / "downloads/ApplePen-v0.3.0.apk"))
     adb("shell", "pm", "grant", PACKAGE, "android.permission.POST_NOTIFICATIONS")
     adb("shell", "am", "start", "-W", "-n", PACKAGE + "/.MainActivity")
     find(lambda n: n.get("text") == "APPLEPEN")
@@ -152,17 +152,18 @@ try:
     click("Custom ports")
     fill("TCP ports", "8089")
     fill("Additional HTTP ports", "8089")
+    click("Check Redis, PostgreSQL and SMTP", scroll=True)
     click("I own this target or have permission to assess it.", scroll=True)
     click("Start assessment", scroll=True)
     find(lambda n: "1 open ports" in n.get("text", ""), attempts=25)
-    adb("install", "-r", str(ROOT / "downloads/ApplePen-v0.3.0.apk"))
+    adb("install", "-r", str(ROOT / "downloads/ApplePen-v0.4.0.apk"))
     adb("shell", "am", "start", "-W", "-n", PACKAGE + "/.MainActivity")
     click("History")
     find(lambda n: n.get("text") == "10.0.2.2")
     click("Rescan this target", scroll=True)
     fill("TCP ports", "8089,9443,15432,1587,16379")
     fill("Additional HTTPS ports", "9443")
-    # Rescan restores v0.2 scope with new protocol probes off, then enable them explicitly.
+    # Rescan restores v0.3 scope with new protocol probes off, then enable them explicitly.
     click("Check Redis, PostgreSQL and SMTP", scroll=True)
     fill("Additional Redis ports", "16379")
     fill("Additional PostgreSQL ports", "15432")
@@ -195,7 +196,8 @@ try:
             assert services == {1587: "SMTP-compatible", 8089: "HTTP", 9443: "HTTPS", 15432: "PostgreSQL-compatible", 16379: "Redis-compatible"}
             assert report["configuration"]["lookupCves"] is False
             assert report["counts"]["open"] == 5
-            assert report["schemaVersion"] == 3
+            assert report["schemaVersion"] == 4
+            assert all(f["cveAssessment"] is None for f in report["findings"])
             assert report["configuration"]["authMethod"] == "Bearer"
             assert any("blocked before sending Authorization" in line for line in report["coverage"])
             assert any("TLSv1.2 accepted" in line for line in report["coverage"])

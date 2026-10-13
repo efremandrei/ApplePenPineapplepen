@@ -261,7 +261,7 @@ public final class ScanEngine {
             progress.update(report.attempted,report.config.ports.size(),"NVD candidate lookup · " + product.query());
             try {
                 CveLookup.Result result = cveLookup.lookup(product,ports.get(0).number); report.coverage.addAll(result.coverage);
-                for (ScanReport.Port port : ports) for (ScanReport.Finding f : result.findings) report.findings.add(new ScanReport.Finding(f.title,f.severity,f.confidence,f.status,port.number,f.evidence,f.impact,f.remediation,f.reference));
+                for (ScanReport.Port port : ports) for (ScanReport.Finding f : result.findings) report.findings.add(new ScanReport.Finding(f.title,f.severity,f.confidence,f.status,port.number,f.evidence,f.impact,f.remediation,f.reference,f.cve));
             } catch (Exception e) { if (!stopped.get()) report.coverage.add("NVD lookup unavailable for " + product.query() + ": " + HttpRules.clean(String.valueOf(e.getMessage())) + ". No CVE conclusion can be drawn."); }
         }
     }

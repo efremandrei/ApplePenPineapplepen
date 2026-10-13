@@ -1,6 +1,7 @@
 package info.hen14.applepen;
 
 import info.hen14.applepen.core.CveLookup;
+import info.hen14.applepen.core.AppVersion;
 import info.hen14.applepen.core.NvdData;
 import info.hen14.applepen.core.ProductFingerprint;
 import info.hen14.applepen.core.ReportExporter;
@@ -44,7 +45,7 @@ public final class NvdClient implements CveLookup {
         rateLimit(); check();
         HttpURLConnection connection = (HttpURLConnection)new URL(BASE + path).openConnection(); current = connection;
         connection.setConnectTimeout(8000); connection.setReadTimeout(8000); connection.setInstanceFollowRedirects(false);
-        connection.setRequestProperty("Accept","application/json"); connection.setRequestProperty("User-Agent","ApplePen/0.2.0");
+        connection.setRequestProperty("Accept","application/json"); connection.setRequestProperty("User-Agent","ApplePen/" + AppVersion.VERSION);
         try {
             int status = connection.getResponseCode();
             if (status != 200) throw new IllegalStateException("NVD HTTP " + status + (status == 403 || status == 429 ? " (access/rate limit; try later)" : ""));

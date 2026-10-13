@@ -29,7 +29,12 @@ public final class ScanReport implements Serializable {
         private static final long serialVersionUID = 1L;
         public final String title, severity, confidence, status, evidence, impact, remediation, reference;
         public final int port;
+        public final CveAssessment cve;
         public Finding(String title, String severity, String confidence, String status, int port, String evidence, String impact, String remediation, String reference) {
+            this(title,severity,confidence,status,port,evidence,impact,remediation,reference,null);
+        }
+        public Finding(String title, String severity, String confidence, String status, int port, String evidence, String impact, String remediation, String reference, CveAssessment cve) {
+            this.cve = cve;
             this.title = title; this.severity = severity; this.confidence = confidence; this.status = status;
             this.port = port; this.evidence = evidence; this.impact = impact;
             this.remediation = remediation; this.reference = reference;

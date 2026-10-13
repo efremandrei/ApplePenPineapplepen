@@ -37,6 +37,7 @@ public final class ReportExporter {
         for (ScanReport.Finding f : r.findings) {
             lines.add(f.severity.toUpperCase(Locale.ROOT) + " · TCP " + f.port + " · " + f.title);
             lines.add("Status: " + f.status + "; confidence: " + f.confidence);
+            if(f.cve!=null) lines.add("CVE applicability: " + f.cve.applicability);
             lines.add("Evidence: " + f.evidence); lines.add("Impact: " + f.impact);
             lines.add("Remediation: " + f.remediation);
             if (!f.reference.isEmpty()) lines.add("Reference: " + f.reference);
@@ -76,7 +77,7 @@ public final class ReportExporter {
         return b.append('"').toString();
     }
     public static String json(ScanReport r) {
-        StringBuilder b = new StringBuilder("{\"schemaVersion\":3,\"scanner\":"); b.append(quote("ApplePen " + r.version())).append(",\"id\":");
+        StringBuilder b = new StringBuilder("{\"schemaVersion\":4,\"scanner\":"); b.append(quote("ApplePen " + r.version())).append(",\"id\":");
         b.append(quote(r.id)).append(",\"targetIp\":").append(quote(r.config.ip)).append(",\"hostname\":").append(quote(r.config.hostname)).append(",\"status\":").append(quote(r.status)).append(",\"network\":").append(quote(r.network)).append(",\"startedAt\":").append(r.startedAt).append(",\"finishedAt\":").append(r.finishedAt).append(",\"error\":").append(quote(r.error));
         b.append(",\"configuration\":{\"profile\":").append(quote(r.config.profile)).append(",\"timeoutMs\":").append(r.config.timeoutMs).append(",\"concurrency\":").append(r.config.concurrency).append(",\"budgetMs\":").append(r.config.budgetMs).append(",\"selectedPorts\":").append(r.config.ports).append(",\"additionalHttpPorts\":").append(numbers(r.config.extraHttpPorts)).append(",\"additionalHttpsPorts\":").append(numbers(r.config.extraHttpsPorts)).append(",\"lookupCves\":").append(r.config.lookupCves).append(",\"protocolChecks\":").append(r.config.protocolChecks).append(",\"additionalRedisPorts\":").append(numbers(r.config.extraRedisPorts)).append(",\"additionalPostgresPorts\":").append(numbers(r.config.extraPostgresPorts)).append(",\"enumerateTls\":").append(r.config.enumerateTls).append(",\"authMethod\":").append(quote(r.config.authenticated() ? r.config.authMethod : "None")).append(",\"authPort\":").append(r.config.authPort).append("},\"counts\":{\"attempted\":").append(r.attempted).append(",\"open\":").append(r.ports.size()).append(",\"closed\":").append(r.closed).append(",\"timedOut\":").append(r.timedOut).append(",\"errors\":").append(r.failed).append("},\"refusedPorts\":").append(numbers(r.refusedPorts)).append(",\"timeoutPorts\":").append(numbers(r.timeoutPorts)).append(",\"errorPorts\":").append(numbers(r.errorPorts)).append(",\"services\":[");
         boolean first = true;
@@ -84,7 +85,7 @@ public final class ReportExporter {
         b.append("],\"findings\":["); first = true;
         for (ScanReport.Finding f : r.findings) {
             if (!first) b.append(','); first = false;
-            b.append("{\"port\":").append(f.port).append(",\"title\":").append(quote(f.title)).append(",\"severity\":").append(quote(f.severity)).append(",\"confidence\":").append(quote(f.confidence)).append(",\"status\":").append(quote(f.status)).append(",\"evidence\":").append(quote(f.evidence)).append(",\"impact\":").append(quote(f.impact)).append(",\"remediation\":").append(quote(f.remediation)).append(",\"reference\":").append(quote(f.reference)).append('}');
+            b.append("{\"port\":").append(f.port).append(",\"title\":").append(quote(f.title)).append(",\"severity\":").append(quote(f.severity)).append(",\"confidence\":").append(quote(f.confidence)).append(",\"status\":").append(quote(f.status)).append(",\"evidence\":").append(quote(f.evidence)).append(",\"impact\":").append(quote(f.impact)).append(",\"remediation\":").append(quote(f.remediation)).append(",\"reference\":").append(quote(f.reference)).append(",\"cveAssessment\":").append(cveJson(f.cve)).append('}');
         }
         b.append("],\"coverage\":["); first = true;
         for (String line : r.coverage) { if (!first) b.append(','); first = false; b.append(quote(line)); }
@@ -92,6 +93,9 @@ public final class ReportExporter {
         if (r.comparison == null) b.append("null");
         else { ReportDiff d = r.comparison; b.append("{\"baselineId\":").append(quote(d.baselineId)).append(",\"baselineStartedAt\":").append(d.baselineStartedAt).append(",\"newFindings\":").append(d.newFindings).append(",\"missingFindings\":").append(d.missingFindings).append(",\"retainedFindings\":").append(d.retainedFindings).append(",\"changedFindings\":").append(d.changedFindings).append(",\"changes\":").append(strings(d.changes)).append(",\"caveats\":").append(strings(d.caveats)).append('}'); }
         return b.append('}').toString();
+    }
+    private static String cveJson(CveAssessment c) {
+        return c==null ? "null" : "{\"product\":" + quote(c.product) + ",\"version\":" + quote(c.version) + ",\"dictionaryCpe\":" + quote(c.dictionaryCpe) + ",\"applicability\":" + quote(c.applicability) + ",\"reason\":" + quote(c.reason) + ",\"rules\":" + strings(c.rules) + "}";
     }
     private static String numbers(List<Integer> values) { return values == null ? "[]" : values.toString(); }
     private static String strings(List<String> values) { StringBuilder b = new StringBuilder("["); for (String value : values) { if (b.length()>1) b.append(','); b.append(quote(value)); } return b.append(']').toString(); }
