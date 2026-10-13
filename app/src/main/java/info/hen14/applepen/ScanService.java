@@ -14,6 +14,7 @@ import android.os.IBinder;
 import android.os.PowerManager;
 import info.hen14.applepen.core.ScanConfig;
 import info.hen14.applepen.core.AuthCredentials;
+import info.hen14.applepen.core.AuthHandoff;
 import info.hen14.applepen.core.ScanEngine;
 import info.hen14.applepen.core.ScanReport;
 import java.util.concurrent.ExecutorService;
@@ -33,11 +34,9 @@ public final class ScanService extends Service {
     private NotificationManager notifications;
     private long lastNotification;
     private PowerManager.WakeLock wakeLock;
-    private static AuthCredentials pendingCredentials;
-    static synchronized void prepareCredentials(AuthCredentials credentials) {
-        if (pendingCredentials != null) pendingCredentials.close(); pendingCredentials = credentials;
-    }
-    private static synchronized AuthCredentials takeCredentials() { AuthCredentials result = pendingCredentials; pendingCredentials = null; return result; }
+    private static final AuthHandoff handoff = new AuthHandoff();
+    static String prepareCredentials(AuthCredentials credentials) { return handoff.prepare(credentials); }
+    private static AuthCredentials takeCredentials(String token) { return handoff.take(token); }
     @Override public void onCreate() {
         super.onCreate();
         notifications = getSystemService(NotificationManager.class);
@@ -46,12 +45,12 @@ public final class ScanService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null) { stopSelf(); return START_NOT_STICKY; }
         if (CANCEL.equals(intent.getAction())) { if (engine != null) { state.message = "Stopping scan…"; engine.cancel(); } else stopSelf(); return START_NOT_STICKY; }
-        if (!START.equals(intent.getAction()) || state.running) return START_NOT_STICKY;
+        if (!START.equals(intent.getAction()) || state.running) { AuthCredentials discarded = takeCredentials(intent.getStringExtra("authToken")); if (discarded != null) discarded.close(); return START_NOT_STICKY; }
         ScanConfig config;
         if (Build.VERSION.SDK_INT >= 33) config = intent.getSerializableExtra("config", ScanConfig.class);
         else config = (ScanConfig) intent.getSerializableExtra("config");
-        if (config == null) { stopSelf(); return START_NOT_STICKY; }
-        engine = new ScanEngine(new NvdClient(getCacheDir()),takeCredentials());
+        if (config == null) { AuthCredentials discarded = takeCredentials(intent.getStringExtra("authToken")); if (discarded != null) discarded.close(); stopSelf(); return START_NOT_STICKY; }
+        engine = new ScanEngine(new NvdClient(getCacheDir()),takeCredentials(intent.getStringExtra("authToken")));
         state.running = true; state.completed = 0; state.total = config.ports.size();
         state.message = "Starting scan"; state.report = null; state.persistenceError = "";
         Notification notification = notification();

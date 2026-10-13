@@ -5,7 +5,7 @@ The shipped APK is built with Android SDK tools directly because this workspace 
 Verified locally:
 
 - Java compilation against API 36, AAPT2 resource/manifest compilation, D8 for API 30+, alignment, and APK signature verification.
-- 43 JUnit tests include bounded RESP/SMTP parsing, Redis PING/INFO and NOAUTH, PostgreSQL SSLRequest decline and TLS upgrade, SMTP EHLO/STARTTLS, protocol assignment scope, verified credentialed HTTPS, untrusted and identity-mismatched certificate blocking, reflected-token exclusion from text/HTML/JSON and serialized history, missing/cleared credentials, conservative TLS version evidence, and synthetic v0.1/v0.2 report compatibility.
+- 45 JUnit tests include bounded RESP/SMTP parsing, Redis PING/INFO and NOAUTH, PostgreSQL SSLRequest decline and TLS upgrade, SMTP EHLO/STARTTLS, protocol assignment scope, verified credentialed HTTPS, untrusted and identity-mismatched certificate blocking, reflected-token exclusion from text/HTML/JSON and serialized history, missing/cleared credentials, per-start credential handoff isolation, conservative TLS version evidence, and synthetic v0.1/v0.2 report compatibility.
 - Tests use owned loopback fixtures only. No public destination was scanned.
 - The delivered APK increments version code to 3, retains the original signing certificate, and disables debugging.
 

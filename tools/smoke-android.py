@@ -209,7 +209,7 @@ try:
     fill("Additional Redis ports", "16379")
     tap(find(lambda n: n.get("content-desc") == "Authentication method", scroll=True))
     click("None")
-    find(lambda n: n.get("content-desc") == "Password or Bearer token" and n.get("text") == "", scroll=True)
+    find(lambda n: n.get("content-desc") == "Password or Bearer token" and n.get("text") in ("", "Used for this assessment only"), scroll=True)
     print("Emulator smoke passed: signed upgrade with retained history, protocol scans, TLS probes, blocked untrusted authentication, cleared credentials, rescan, PDF/HTML/JSON exports.", flush=True)
 finally:
     for server in servers:

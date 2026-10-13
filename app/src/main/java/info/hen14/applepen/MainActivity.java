@@ -251,8 +251,8 @@ public final class MainActivity extends Activity {
         if (waitingConfig == null) return;
         if (waitingConfig.authenticated() && waitingAuth == null) { waitingConfig = null; toast("Enter credentials again after the screen was recreated."); return; }
         try {
-            ScanService.prepareCredentials(waitingAuth); waitingAuth = null;
-            startForegroundService(new Intent(this,ScanService.class).setAction(ScanService.START).putExtra("config",waitingConfig)); wasRunning = true; waitingConfig = null;
+            String authToken = ScanService.prepareCredentials(waitingAuth); waitingAuth = null;
+            startForegroundService(new Intent(this,ScanService.class).setAction(ScanService.START).putExtra("config",waitingConfig).putExtra("authToken",authToken)); wasRunning = true; waitingConfig = null;
             authUserInput.setText(""); authSecretInput.setText("");
         } catch (Exception e) { ScanService.prepareCredentials(null); toast("Could not start scan: " + e.getMessage()); }
     }

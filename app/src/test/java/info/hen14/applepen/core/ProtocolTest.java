@@ -151,6 +151,18 @@ public class ProtocolTest {
     @Test public void tlsVersionFailuresRemainInconclusiveAndSuccessfulModernHandshakeIsRecorded() throws Exception {
         List<String> requests=new CopyOnWriteArrayList<>(); try(Fixture f=https(requests,true)) { ScanReport r=scan(config(f.port(),"localhost","HTTPS",true,"None")); assertTrue(r.coverage.stream().anyMatch(x->x.contains("TLSv1.2 accepted"))); assertTrue(r.coverage.stream().anyMatch(x->x.contains("TLSv1.3 probe inconclusive"))); assertFalse(r.findings.stream().anyMatch(x->x.title.startsWith("Obsolete TLS"))); }
     }
+    @Test public void replacedCredentialCannotBeConsumedByAnEarlierStart() {
+        try(AuthHandoff h=new AuthHandoff()) {
+            AuthCredentials first=new AuthCredentials("Bearer","","first-token"), second=new AuthCredentials("Bearer","","second-token");
+            String old=h.prepare(first), current=h.prepare(second); assertNotEquals(old,current);
+            assertThrows(IllegalStateException.class,first::authorization); assertNull(h.take(old)); assertNull(h.take("unknown"));
+            assertSame(second,h.take(current)); assertNull(h.take(current)); second.close();
+        }
+    }
+    @Test public void abandonedCredentialHandoffClearsItsSecret() {
+        AuthHandoff h=new AuthHandoff(); AuthCredentials c=new AuthCredentials("Basic","fixture","password"); String token=h.prepare(c); h.close();
+        assertNull(h.take(token)); assertThrows(IllegalStateException.class,c::authorization);
+    }
     @Test public void v020HistoryDeserializesWithNewProbesAndAuthenticationOff() throws Exception {
         try(ObjectInputStream in=new ObjectInputStream(getClass().getResourceAsStream("/legacy-v020.report"))) {
             ScanReport r=(ScanReport)in.readObject(); assertEquals("0.2.0",r.version()); assertTrue(r.config.http(8089)); assertFalse(r.config.protocolChecks); assertFalse(r.config.enumerateTls); assertFalse(r.config.authenticated()); assertNull(r.config.extraRedisPorts);
