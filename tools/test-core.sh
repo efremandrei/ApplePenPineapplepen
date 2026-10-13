@@ -7,4 +7,4 @@ task_test="$project_dir/app/build/core-tests"
 mkdir -p "$task_test"
 find "$project_dir/app/src/main/java/info/hen14/applepen/core" "$project_dir/app/src/test/java" -name '*.java' > "$task_test/sources.txt"
 java com.sun.tools.javac.Main -encoding UTF-8 -classpath "$JUNIT_JAR:$HAMCREST_JAR" -d "$task_test" @"$task_test/sources.txt"
-java -classpath "$task_test:$JUNIT_JAR:$HAMCREST_JAR" org.junit.runner.JUnitCore info.hen14.applepen.core.CoreTest
+java -classpath "$task_test:$project_dir/app/src/test/resources:$JUNIT_JAR:$HAMCREST_JAR" org.junit.runner.JUnitCore info.hen14.applepen.core.CoreTest info.hen14.applepen.core.ReleaseTest

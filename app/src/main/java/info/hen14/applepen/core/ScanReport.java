@@ -12,6 +12,9 @@ public final class ScanReport implements Serializable {
     public long finishedAt;
     public String status = "Running", network = "Unknown", error = "";
     public int attempted, closed, timedOut, failed;
+    public String scannerVersion = AppVersion.VERSION;
+    public final ArrayList<Integer> refusedPorts = new ArrayList<>(), timeoutPorts = new ArrayList<>(), errorPorts = new ArrayList<>();
+    public ReportDiff comparison;
     public final ArrayList<Port> ports = new ArrayList<>();
     public final ArrayList<Finding> findings = new ArrayList<>();
     public final ArrayList<String> coverage = new ArrayList<>();
@@ -34,4 +37,5 @@ public final class ScanReport implements Serializable {
     }
     public int count(String severity) { int n = 0; for (Finding f : findings) if (f.severity.equals(severity)) n++; return n; }
     public String summary() { return ports.size() + " open ports · " + findings.size() + " findings · " + status; }
+    public String version() { return scannerVersion == null ? "0.1.0" : scannerVersion; }
 }

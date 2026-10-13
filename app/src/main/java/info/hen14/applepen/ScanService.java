@@ -45,7 +45,7 @@ public final class ScanService extends Service {
         if (Build.VERSION.SDK_INT >= 33) config = intent.getSerializableExtra("config", ScanConfig.class);
         else config = (ScanConfig) intent.getSerializableExtra("config");
         if (config == null) { stopSelf(); return START_NOT_STICKY; }
-        engine = new ScanEngine();
+        engine = new ScanEngine(new NvdClient(getCacheDir()));
         state.running = true; state.completed = 0; state.total = config.ports.size();
         state.message = "Starting scan"; state.report = null; state.persistenceError = "";
         Notification notification = notification();

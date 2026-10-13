@@ -7,6 +7,12 @@ if [[ -z "$task_sdk" ]]; then echo 'Set ANDROID_HOME to an installed Android SDK
 task_tools="$task_sdk/build-tools/36.0.0"
 task_android="$task_sdk/platforms/android-36/android.jar"
 task_build="$project_dir/app/build/manual"
+read -r task_code task_version < <(python3 - "$project_dir/app/build.gradle" <<'PY'
+import re,sys
+text=open(sys.argv[1]).read()
+print(re.search(r'versionCode\s+(\d+)',text)[1], re.search(r"versionName\s+'([0-9.]+)'",text)[1])
+PY
+)
 rm -rf "$task_build"
 mkdir -p "$task_build/classes" "$task_build/resources" "$task_build/generated" "$task_build/dex"
 "$task_tools/aapt2" compile --dir "$project_dir/app/src/main/res" -o "$task_build/resources"
@@ -18,7 +24,7 @@ open(sys.argv[2], 'w').write(text)
 PY
 "$task_tools/aapt2" link -o "$task_build/unsigned.apk" -I "$task_android" \
   --manifest "$task_build/AndroidManifest.xml" --java "$task_build/generated" --debug-mode \
-  --min-sdk-version 30 --target-sdk-version 36 --version-code 1 --version-name 0.1.0 \
+  --min-sdk-version 30 --target-sdk-version 36 --version-code "$task_code" --version-name "$task_version" \
   "${task_resources[@]}"
 find "$project_dir/app/src/main/java" "$task_build/generated" -name '*.java' -print > "$task_build/sources.txt"
 java com.sun.tools.javac.Main -encoding UTF-8 -source 17 -target 17 -classpath "$task_android" -d "$task_build/classes" @"$task_build/sources.txt"
@@ -37,6 +43,6 @@ if [[ ! -f "$task_key" ]]; then
     -dname 'CN=Android Debug,O=Android,C=US' -keyalg RSA -keysize 2048 -validity 10000 >/dev/null 2>&1
 fi
 "$task_tools/apksigner" sign --ks "$task_key" --ks-key-alias androiddebugkey \
-  --ks-pass pass:android --key-pass pass:android --out "$task_build/ApplePen-v0.1.0.apk" "$task_build/aligned.apk"
-"$task_tools/apksigner" verify "$task_build/ApplePen-v0.1.0.apk"
-echo "$task_build/ApplePen-v0.1.0.apk"
+  --ks-pass pass:android --key-pass pass:android --out "$task_build/ApplePen-v$task_version.apk" "$task_build/aligned.apk"
+"$task_tools/apksigner" verify "$task_build/ApplePen-v$task_version.apk"
+echo "$task_build/ApplePen-v$task_version.apk"
