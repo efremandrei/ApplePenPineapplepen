@@ -135,6 +135,11 @@ public class ApplicabilityTest {
         CpeName c=CpeName.parse("cpe:2.3:a:nginx:nginx:1.24.0:*:edition\\:name:*:*:*:*:*");assertNotNull(c);assertEquals("edition\\:name",c.field(7));assertEquals("*",c.field(8));
         for(String s:new String[]{"cpe:/a:nginx:nginx:1.24.0","cpe:2.3:a:nginx:nginx:1.24.0:*:*:*:*:*:*:",NGINX+"\\",NGINX+":extra"})assertNull(CpeName.parse(s));
     }
+    @Test public void unsupportedProductSyntaxCannotBeMistakenForADifferentProduct() {
+        for(String criteria:List.of("cpe:2.3:z:nginx:nginx:*:*:*:*:*:*:*:*","cpe:2.3:a:nginx :nginx:*:*:*:*:*:*:*:*","cpe:2.3:a:nginx+:nginx:*:*:*:*:*:*:*:*","cpe:2.3:a:other:software!:*:*:*:*:*:*:*:*")) {
+            NvdApplicability.Result r=evaluate(criterion(criteria,true));assertEquals(NvdApplicability.Outcome.UNKNOWN,r.outcome);assertTrue(r.retained());
+        }
+    }
     @Test public void dictionarySelectionPrefersGenericNamesAndRequiresExplicitNonDeprecation() {
         String generic=NGINX.replaceFirst(java.util.regex.Pattern.quote(":*:*:"),":1.24.0:*:"), specific="cpe:2.3:a:nginx:nginx:1.24.0:*:*:*:*:linux:*:*";
         String response=json(Map.of("totalResults",2,"products",List.of(Map.of("cpe",Map.of("deprecated",false,"cpeName",specific)),Map.of("cpe",Map.of("deprecated",false,"cpeName",generic)))));
