@@ -54,10 +54,41 @@ def click(text, scroll=False):
 
 
 def fill(label, value):
-    tap(find(lambda n: n.get("content-desc") == label, scroll=True))
-    adb("shell", "input", "keycombination", "113", "29")  # Ctrl+A
-    adb("shell", "input", "text", value)
-    adb("shell", "input", "keyevent", "KEYCODE_BACK")
+    for _ in range(3):
+        node = find(lambda n: n.get("content-desc") == label, scroll=True)
+        tap(node)
+        current = node.get("text", "")
+        if current and current != node.get("hint", ""):
+            adb("shell", "input", "keycombination", "113", "29")  # Ctrl+A for existing text only
+        adb("shell", "input", "text", value)
+        adb("shell", "input", "keyevent", "KEYCODE_BACK")
+        observed = find(lambda n: n.get("content-desc") == label)
+        if observed.get("password") == "true":
+            return  # Password text is deliberately not exposed or logged.
+        if observed.get("text") == value:
+            return
+    raise AssertionError("Input readback did not match for " + label)
+
+
+def set_checked(label, desired):
+    node = find(lambda n: n.get("text") == label, scroll=True)
+    if (node.get("checked") == "true") != desired:
+        tap(node)
+    assert (find(lambda n: n.get("text") == label).get("checked") == "true") == desired
+
+
+def verify_owned_target():
+    for _ in range(12):
+        nodes = list(snapshot().iter("node"))
+        node = next((n for n in nodes if n.get("content-desc") == "Destination IP"), None)
+        if node is not None:
+            break
+        size = adb("shell", "wm", "size").decode()
+        width, height = map(int, re.findall(r"(\d+)x(\d+)", size)[-1])
+        adb("shell", "input", "swipe", str(width // 2), str(height // 3), str(width // 2), str(height * 4 // 5), "300")
+    else:
+        raise AssertionError("Target input unavailable for the fixture guard")
+    assert node.get("text") == "10.0.2.2", "Refusing to scan a destination outside the owned emulator fixture"
 
 
 class Fixture(http.server.BaseHTTPRequestHandler):
@@ -152,8 +183,9 @@ try:
     click("Custom ports")
     fill("TCP ports", "8089")
     fill("Additional HTTP ports", "8089")
-    click("Check Redis, PostgreSQL and SMTP", scroll=True)
-    click("I own this target or have permission to assess it.", scroll=True)
+    set_checked("Check Redis, PostgreSQL and SMTP", False)
+    verify_owned_target()
+    set_checked("I own this target or have permission to assess it.", True)
     click("Start assessment", scroll=True)
     find(lambda n: "1 open ports" in n.get("text", ""), attempts=25)
     adb("install", "-r", str(ROOT / "downloads/ApplePen-v0.4.0.apk"))
@@ -164,15 +196,16 @@ try:
     fill("TCP ports", "8089,9443,15432,1587,16379")
     fill("Additional HTTPS ports", "9443")
     # Rescan restores v0.3 scope with new protocol probes off, then enable them explicitly.
-    click("Check Redis, PostgreSQL and SMTP", scroll=True)
+    set_checked("Check Redis, PostgreSQL and SMTP", True)
     fill("Additional Redis ports", "16379")
     fill("Additional PostgreSQL ports", "15432")
-    click("Probe TLS 1.0, 1.1, 1.2 and 1.3", scroll=True)
+    set_checked("Probe TLS 1.0, 1.1, 1.2 and 1.3", True)
     tap(find(lambda n: n.get("content-desc") == "Authentication method", scroll=True))
     click("Bearer")
     fill("Authentication HTTPS port", "9443")
     fill("Password or Bearer token", "fake-smoke-token")
-    click("I own this target or have permission to assess it.", scroll=True)
+    verify_owned_target()
+    set_checked("I own this target or have permission to assess it.", True)
     click("Start assessment", scroll=True)
     find(lambda n: "5 open ports" in n.get("text", ""), attempts=40)
     (OUT / "report.png").write_bytes(adb("exec-out", "screencap", "-p"))

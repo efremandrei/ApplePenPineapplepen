@@ -10,7 +10,7 @@ Local verification:
 - Java/API 36 compilation, AAPT2 resource/manifest compilation, D8 for API 30+, APK alignment, and signing checks are performed by the SDK build.
 - The APK uses version code 4, keeps the original signing certificate, and disables debugging.
 
-Tests use owned local fixtures only; no public destination is scanned. NVD behavior is tested with deterministic source fixtures; live NVD availability is not a release gate. Optional lookups continue to use verified HTTPS, opt-in software-identifier sharing, response/rate/page limits, and a 24-hour cache.
+Unit tests use owned loopback fixtures. The final emulator suite verifies input values and enforces the owned fixture IP before starting each scan. NVD behavior is tested with deterministic source fixtures; live NVD availability is not a release gate. Optional lookups continue to use verified HTTPS, opt-in software-identifier sharing, response/rate/page limits, and a 24-hour cache.
 
 The emulator seeds a v0.3 report, installs v0.4 as an update, checks retained history, scans owned HTTP/TLS/Redis/PostgreSQL/SMTP fixtures, verifies TLS probes and credential blocking/clearing, and exercises rescan and PDF/HTML/JSON exports with schema 4. Native smoke CVE lookup is off; applicability logic and CVE metadata are verified by JVM fixtures. The workflow's actual result is authoritative. Screenshots, exports, UI XML and logcat are retained as artifacts.
 
