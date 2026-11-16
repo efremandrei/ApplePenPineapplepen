@@ -140,7 +140,7 @@ public final class MainActivity extends Activity {
     private void showAbout() {
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("About ApplePen")
-            .setMessage("Andrei Efremuahkin\\nandrei.efr@gmail.com\\n\\nhttps://github.com/efremandrei/ApplePenPineapplepen\\nVersion " + AppVersion.VERSION)
+            .setMessage("Andrei Efremuahkin\nandrei.efr@gmail.com\n\nhttps://github.com/efremandrei/ApplePenPineapplepen\nVersion " + AppVersion.VERSION)
             .setPositiveButton("Close", null)
             .create();
         dialog.setOnShowListener(ignored -> {
