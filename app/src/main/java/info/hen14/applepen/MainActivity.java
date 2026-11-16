@@ -137,6 +137,23 @@ public final class MainActivity extends Activity {
         b.setPadding(dp(14),dp(10),dp(14),dp(10)); b.setMinHeight(dp(48));
         b.setOnClickListener(view -> action.run()); return b;
     }
+    private void showAbout() {
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("About ApplePen")
+            .setMessage("Andrei Efremuahkin\\nandrei.efr@gmail.com\\n\\nhttps://github.com/efremandrei/ApplePenPineapplepen\\nVersion " + AppVersion.VERSION)
+            .setPositiveButton("Close", null)
+            .create();
+        dialog.setOnShowListener(ignored -> {
+            TextView message = dialog.findViewById(android.R.id.message);
+            if (message != null) {
+                android.text.util.Linkify.addLinks(message, android.text.util.Linkify.EMAIL_ADDRESSES | android.text.util.Linkify.WEB_URLS);
+                message.setLinksClickable(true);
+                message.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
+            }
+        });
+        dialog.show();
+    }
+
     private void render() {
         ipInput = null; progressText = null;
         root = column(); root.setBackgroundColor(BG);
@@ -145,7 +162,7 @@ public final class MainActivity extends Activity {
             root.setPadding(bars.left,bars.top,bars.right,bars.bottom); return insets;
         });
         LinearLayout top = column(); top.setPadding(dp(22),dp(14),dp(22),dp(10));
-        top.addView(text("APPLEPEN",28,INK,true)); top.addView(text("Network security, from your phone · " + AppVersion.VERSION,13,MUTED,false)); root.addView(top);
+        top.addView(text("APPLEPEN",28,INK,true)); top.addView(text("Network security, from your phone · " + AppVersion.VERSION,13,MUTED,false)); top.addView(button("About",false,this::showAbout)); root.addView(top);
         LinearLayout tabs = row(); tabs.setPadding(dp(16),0,dp(16),dp(12));
         for (String name : new String[]{"Scan","History","Report"}) {
             Button b = button(name,tab.equals(name),() -> { rememberForm(); tab = name; render(); });
